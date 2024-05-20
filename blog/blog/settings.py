@@ -133,7 +133,7 @@ STATICFILES_DIRS = [
 CACHES = {
     "default": {# 默认
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis: //127.0.0.1:6379/0",
+        "LOCATION": "redis://127.0.0.1:6379/0",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         }
@@ -190,3 +190,7 @@ LOGGING = {
         },
     }
 }
+
+# 替换系统User 来使用我们自己定义的User
+# 配置信息为 ‘子应用名。模型类型’
+AUTH_USER_MODEL='users.User'
