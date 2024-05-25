@@ -35,4 +35,6 @@ urlpatterns = [
     #namespace
     path('',include(('users.urls','users'),namespace='users')),
     # path('',log),
+
+    path('',include(('home.urls','home'),namespace='home')),
 ]

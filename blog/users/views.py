@@ -8,6 +8,9 @@ import re
 from users.models import User
 from django.db import DatabaseError
 # Create your views here.
+from django.shortcuts import redirect
+from django.urls import reverse
+
 #注册视图
 class RegisterView(View):
     def get(self,request):
@@ -48,9 +51,20 @@ class RegisterView(View):
         except DatabaseError as e:
             logger.error(e)
             return HttpResponseBadRequest('注册失败')
+
+        from django.contrib.auth import login
+        login(request,user)
         # 4.返回响应跳转到指定页面
         # 暂时返回一个注册成功的信息，后期再实现跳转到指定页面
-        return HttpResponse('注册成功，重定向到首页')
+        response = redirect(reverse('home:index'))
+        #return HttpResponse('注册成功，重定向到首页')
+
+        # 设置cookie信息
+        response.set_cookie('is_login',True)
+        response.set_cookie('username',user.username,max_age=7*24*3600)
+
+        return response
+
 
 from django.http.response import HttpResponseBadRequest
 from libs.captcha.captcha import captcha
@@ -118,4 +132,62 @@ class SmsCodeView(View):
         # 6.返回响应
         return JsonResponse({'code':RETCODE.OK,'errmsg':'短信发送成功'})
 
+class LoginView(View):
+    def get(self,request):
+        return render(request,'login.html')
 
+    def post(self,request):
+        # 1 接收参数
+        mobile=request.POST.get('mobile')
+        password=request.POST.get('password')
+        remember=request.POST.get('remember')
+        # 2 参数的验证
+        #     2.1 验证手机号是否符合规则
+        if not re.match(r'^1[3-9]\d{9}$', mobile):
+            return HttpResponseBadRequest('手机号不符合规则')
+        #     2.2 验证密码是否符合规则
+        if not re.match(r'^[a-zA-Z0-9]{8,20}$', password):
+            return HttpResponseBadRequest('密码不符合规则')
+        # 3 用户认证登录
+        # 采用系统自带的认证方法
+        # 用户名密码正确，返回user
+        # 用户名不正确，返回None
+        from django.contrib.auth import authenticate
+        # 默认的认证方法中是对username进行认证。我们需要修改认证的字段为mobile。所以我们需要在User的模型中修改
+        user=authenticate(mobile=mobile,password=password)
+
+        if user is None:
+            return HttpResponseBadRequest('用户名或密码错误')
+        # 4 状态的保持
+        from django.contrib.auth import login
+        login(request,user)
+        # 5 根据用户选择的是否记住登录状态来进行判断
+        # 6 为了首页显示配置cookiexinx
+        response=redirect(reverse('home:index'))
+        if remember !='on':  # 没有记住用户信息
+            # 浏览器关闭后
+            request.session.set_expiry(0)
+            response.set_cookie('is_login',True)
+            response.set_cookie('username',user.username,max_age=14*24*3600)
+        else:
+            # 默认记住两周
+            request.session.set_expiry(None)   # 记住用户信息
+            response.set_cookie('is_login',True,max_age=14*24*3600)
+            response.set_cookie('username',user.username,max_age=14*24*3600)
+
+        # 7 返回相应
+        return response
+
+from django.contrib.auth import logout
+
+class LogoutView(View):
+
+    def get(self,request):
+        # 清理session
+        logout(request)
+        # 退出登录，重定向到登录页
+        response = redirect(reverse('home:index'))
+        # 退出登录时清除cookie中的登录状态
+        response.delete_cookie('is_login')
+
+        return response
