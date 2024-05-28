@@ -163,7 +163,11 @@ class LoginView(View):
         login(request,user)
         # 5 根据用户选择的是否记住登录状态来进行判断
         # 6 为了首页显示配置cookiexinx
-        response=redirect(reverse('home:index'))
+        next_page = request.GET.get('next')
+        if next_page:
+            response = redirect(next_page)
+        else:
+            response = redirect(reverse('home:index'))
         if remember !='on':  # 没有记住用户信息
             # 浏览器关闭后
             request.session.set_expiry(0)
@@ -191,3 +195,155 @@ class LogoutView(View):
         response.delete_cookie('is_login')
 
         return response
+
+
+# from django.views import View
+
+class ForgetPasswordView(View):
+
+    def get(self, request):
+
+        return render(request, 'forget_password.html')
+
+    def post(self, request):
+        # 接收参数
+        mobile = request.POST.get('mobile')
+        password = request.POST.get('password')
+        password2 = request.POST.get('password2')
+        smscode = request.POST.get('sms_code')
+
+        # 判断参数是否齐全
+        if not all([mobile, password, password2, smscode]):
+            return HttpResponseBadRequest('参数不全')
+
+        # 判断手机号是否合法
+        if not re.match(r'^1[3-9]\d{9}$', mobile):
+            return HttpResponseBadRequest('手机号不符合规则')
+
+        # 判断密码是否是8-20个数字
+        if not re.match(r'^[0-9A-Za-z]{8,20}$', password):
+            return HttpResponseBadRequest('密码不符合规则')
+
+        # 判断两次密码是否一致
+        if password2 != password:
+            return HttpResponseBadRequest('密码不一致')
+
+        # 验证短信验证码
+        redis_conn = get_redis_connection('default')
+        redis_sms_code = redis_conn.get('sms:%s' % mobile)
+        if redis_sms_code is None:
+            return HttpResponseBadRequest('短信验证码已过期')
+        if smscode != redis_sms_code.decode():
+            return HttpResponseBadRequest('短信验证码错误')
+
+        # 根据手机号查询数据
+        try:
+            user = User.objects.get(mobile=mobile)
+        except User.DoesNotExist:
+            # 如果该手机号不存在，则注册个新用户
+            try:
+                User.objects.create_user(username=mobile,
+                                         mobile=mobile,
+                                         password=password)
+            except Exception:
+                return HttpResponseBadRequest('修改失败，请稍后再试')
+        else:
+            # 修改用户密码
+            user.set_password(password)
+            user.save()
+
+        # 跳转到登录页面
+        response = redirect(reverse('users:login'))
+
+        return response
+
+from django.contrib.auth.mixins import LoginRequiredMixin
+
+class UserCenterView(LoginRequiredMixin,View):
+
+    def get(self,request):
+
+        user = request.user
+
+        # 组织模板渲染数据
+        context = {
+            'username': user.username,
+            'mobile': user.mobile,
+            'avatar': user.avatar.url if user.avatar else None,
+            'user_desc': user.user_desc
+        }
+        return render(request, 'center.html', context=context)
+
+    def post(self, request):
+        # 接收数据
+        user = request.user
+        username = request.POST.get('username', user.username)
+        user_desc = request.POST.get('desc', user.user_desc)
+        avatar = request.FILES.get('avatar')
+        # 修改数据库数据
+        try:
+            user.username = username
+            user.user_desc = user_desc
+            if avatar:
+                user.avatar = avatar
+            user.save()
+        except Exception as e:
+            logger.error(e)
+            return HttpResponseBadRequest('修改失败，请稍后再试')
+
+        # 返回响应，刷新页面
+        response = redirect(reverse('users:center'))
+        # 更新cookie信息
+        response.set_cookie('username', user.username, max_age=14*3600*24)
+        return response
+
+from home.models import ArticleCategory,Article
+class WriteBlogView(LoginRequiredMixin,View):
+
+    def get(self,request):
+        # 获取博客分类信息
+        categories = ArticleCategory.objects.all()
+
+        context = {
+            'categories': categories
+        }
+        return render(request,'write_blog.html',context=context)
+
+    def post(self, request):
+        # 接收数据
+        avatar = request.FILES.get('avatar')
+        title = request.POST.get('title')
+        category_id = request.POST.get('category')
+        tags = request.POST.get('tags')
+        sumary = request.POST.get('sumary')
+        content = request.POST.get('content')
+        user = request.user
+
+        # 验证数据是否齐全
+        if not all([avatar, title, category_id, sumary, content]):
+            return HttpResponseBadRequest('参数不全')
+
+        # 判断文章分类id数据是否正确
+        try:
+            category = ArticleCategory.objects.get(id=category_id)
+        except ArticleCategory.DoesNotExist:
+            return HttpResponseBadRequest('没有此分类')
+
+        # 保存到数据库
+        try:
+            article = Article.objects.create(
+                author=user,
+                avatar=avatar,
+                category=category,
+                tags=tags,
+                title=title,
+                sumary=sumary,
+                content=content
+            )
+        except Exception as e:
+            logger.error(e)
+            return HttpResponseBadRequest('发布失败，请稍后再试')
+
+        # 返回响应，跳转到文章详情页面
+        # 暂时先跳转到首页
+        return redirect(reverse('home:index'))
