@@ -37,7 +37,7 @@
                 <div class="dropdown-menu" aria-labelledby="navbarDropdown" style="display: block" v-show="show_menu">
                     <a class="dropdown-item" href="{% url 'users:writeblog' %}">写文章</a>
                     <a class="dropdown-item" href='{% url 'users:center' %}'>个人信息</a>
-                    <a class="dropdown-item" href='{% url 'users:login' %}'>退出登录</a>
+                    <a class="dropdown-item" href='{% url 'users:logout' %}'>退出登录</a>
                 </div>
             </li>
             <!-- 如果用户未登录，则显示登录按钮 -->
@@ -111,7 +111,7 @@
 <!-- Footer -->
 <footer class="py-3 bg-dark" id="footer">
     <div class="container">
-        <h5 class="m-0 text-center text-white">Copyright @ qiruihua</h5>
+        <h5 class="m-0 text-center text-white">Copyright @ baiyingqi</h5>
     </div>
 </footer>
 </div>

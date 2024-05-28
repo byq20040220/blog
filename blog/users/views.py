@@ -183,7 +183,6 @@ class LoginView(View):
         return response
 
 from django.contrib.auth import logout
-
 class LogoutView(View):
 
     def get(self,request):
